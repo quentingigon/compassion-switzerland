@@ -37,9 +37,11 @@
     'website': 'http://www.compassion.ch',
     'data': [
         'views/import_letter_view.xml',
+        'views/request.xml',
     ],
     'depends': ['mass_mailing_switzerland', 'child_sync_wp',
-                'sbc_switzerland', 'crm_compassion'],
+                'cms_form_compassion', 'sbc_switzerland', 'crm_compassion',
+                'crm_request'],
     'external_dependencies': {
         'python': ['pysftp']
     },

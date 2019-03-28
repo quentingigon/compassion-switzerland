@@ -31,6 +31,8 @@ class MuskathlonRegistration(models.Model):
     sport_level_description = fields.Text('Describe your sport experience')
     t_shirt_size = fields.Selection(
         related='partner_id.advocate_details_id.t_shirt_size', store=True)
+    t_shirt_type = fields.Selection(
+        related='partner_id.advocate_details_id.t_shirt_type', store=True)
     muskathlon_participant_id = fields.Char(
         related='partner_id.muskathlon_participant_id')
     muskathlon_event_id = fields.Char(
@@ -42,6 +44,16 @@ class MuskathlonRegistration(models.Model):
          'Only one registration per participant/event is allowed!')
     ]
 
+    def create(self, values):
+        # Automatically complete the task sign_child_protection if the charter
+        # has already been signed.
+        partner = self.env['res.partner'].browse(values.get('partner_id'))
+        if partner and partner.has_agreed_child_protection_charter:
+            task = self.env.ref('muskathlon.task_sign_child_protection')
+            completed_tasks = values.setdefault('completed_task_ids', [])
+            completed_tasks.append((4, task.id))
+        return super(MuskathlonRegistration, self).create(values)
+
     def _compute_amount_raised(self):
         # Use Muskathlon report to compute Muskathlon event donation
         muskathlon_report = self.env['muskathlon.report']
@@ -51,7 +63,6 @@ class MuskathlonRegistration(models.Model):
                 item.amount for item in muskathlon_report.search([
                     ('user_id', '=', registration.partner_id.id),
                     ('event_id', '=', registration.compassion_event_id.id),
-                    ('registration_id', '=', registration.reg_id),
                 ])
             ))
             registration.amount_raised = amount_raised
@@ -81,6 +92,14 @@ class MuskathlonRegistration(models.Model):
     @related_action('related_action_registration')
     def notify_new_registration(self):
         """Notify user for registration"""
-        self._message_auto_subscribe_notify(
-            self.mapped('user_id.partner_id').ids)
+        partners = self.mapped('user_id.partner_id') | self.event_id.mapped(
+            'message_partner_ids')
+        self.message_subscribe(partners.ids)
+        self.message_post(
+            body=_(
+                "The participant registered through the Muskathlon website."),
+            subject=_("%s - New Muskathlon registration") % self.name,
+            message_type='email',
+            subtype="website_event_compassion.mt_registration_create"
+        )
         return True

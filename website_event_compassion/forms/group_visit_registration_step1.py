@@ -25,9 +25,9 @@ if not testing:
             'include_flight', 'comments'
         ]
         _form_required_fields = [
-            'partner_lastname', 'partner_firstname', 'partner_email',
-            'email_copy',
-            'partner_birthdate'
+            'partner_title', 'partner_lastname', 'partner_firstname',
+            'partner_street',
+            'partner_email', 'email_copy', 'partner_birthdate'
         ]
         _display_type = 'full'
 
@@ -39,8 +39,60 @@ if not testing:
         spoken_lang_es = fields.Boolean('Spanish')
         spoken_lang_po = fields.Boolean('Portuguese')
         include_flight = fields.Boolean(default=True)
-        double_room_person = fields.Char('I want to share a double room with:')
+        single_double_room = fields.Selection([
+            ('single', 'Single room'),
+            ('double', 'Double room'),
+        ], 'Hotel room')
+        double_room_person = fields.Char('I want to share the room with:')
         comments = fields.Text(default='')
+
+        def _form_load_single_double_room(
+                self, fname, field, value, **req_values):
+            youth_type = self.env.ref(
+                'website_event_compassion.event_type_youth_trip')
+            event_type = self.event_id.event_type_id
+            if event_type == youth_type:
+                return 'double'
+            else:
+                return 'single'
+
+        @property
+        def form_title(self):
+            return _("4 steps to register")
+
+        @property
+        def form_description(self):
+            user = self.event_id.sudo().user_id
+            return _(
+                "<p>Thank you for your interest in the work of Compassion, "
+                "to free more children from extreme poverty every day. "
+                "To live this unique experience of discovery, you just have"
+                " to complete the following 4 steps:</p>"
+                "<ol>"
+                "<li>Register with your coordinates</li>"
+                "<li>Accept the travel agreements</li>"
+                "<li>Pay a down payment, then the invoice</li>"
+                "<li>Prepare the trip</li>"
+                "</ol>"
+                "<p>Your registration will be validated and a place will be "
+                "reserved for you on this trip as soon as you have completed "
+                "the first three steps above."
+                "<br/><br/>"
+                "I will inform you at each important moment of the preparation"
+                " of the trip of the steps to be taken. If you have any "
+                "question, don't hesitate to contact me: "
+                "<br/><br/>"
+                "%s"
+                "</br>"
+                "%s"
+                "</br>"
+                "%s"
+                "</br>"
+                "Compassion Switzerland"
+                "</p>"
+            ) % (user.preferred_name + " " + user.lastname,
+                 user.employee_ids.department_id.name,
+                 user.email.replace('@', '(at)')) + "<br/><br/>"
 
         @property
         def _form_fieldsets(self):
@@ -55,13 +107,34 @@ if not testing:
                 lang_fields.append('spoken_lang_it')
             lang_fields.extend([
                 'spoken_lang_es', 'spoken_lang_po'])
+            event = self.event_id.sudo()
+            trip_options = {
+                'id': 'trip',
+                'title': _('Trip options'),
+            }
+            if event.flight_price:
+                trip_options.update({
+                    'description': _(
+                        'You can have the flight included (CHF %s) or '
+                        'decide to book the flight by yourself if you want '
+                        'to extend your trip beyond the dates. '
+                    ) % str(int(event.flight_price)),
+                    'fields': [
+                        'include_flight', 'single_double_room',
+                        'double_room_person', 'comments']
+                })
+            else:
+                trip_options.update({
+                    'fields': [
+                        'single_double_room', 'double_room_person', 'comments']
+                })
             return [
                 {
                     'id': 'coordinates',
                     'fields': [
-                        'partner_lastname', 'partner_firstname',
-                        'partner_email', 'email_copy',
-                        'partner_birthdate', 'partner_phone',
+                        'partner_title', 'partner_lastname',
+                        'partner_firstname', 'partner_email', 'email_copy',
+                        'partner_birthdate', 'partner_phone', 'partner_street',
                         'partner_zip', 'partner_city', 'partner_country_id'
                     ]
                 },
@@ -70,19 +143,7 @@ if not testing:
                     'title': _('Your spoken languages'),
                     'fields': lang_fields
                 },
-                {
-                    'id': 'trip',
-                    'title': _('Trip options'),
-                    'description': _(
-                        'You can have the flight included (CHF %s) or '
-                        'decide to book the flight by yourself if you want '
-                        'to extend your trip beyond the dates. '
-                        'You can specify someone if you want to share a room '
-                        'or leave the field empty to have a single room.'
-                    ) % str(int(self.event_id.sudo().flight_price)),
-                    'fields': [
-                        'include_flight', 'double_room_person', 'comments']
-                },
+                trip_options
             ]
 
         def _form_validate_email_copy(self, value, **req_values):
@@ -91,10 +152,21 @@ if not testing:
             # No error
             return 0, 0
 
+        @property
+        def form_widgets(self):
+            # Radio field for single double room
+            res = super(EventRegistrationForm, self).form_widgets
+            res['single_double_room'] = 'cms.form.widget.radio'
+            return res
+
         def form_before_create_or_update(self, values, extra_values):
             super(EventRegistrationForm, self).form_before_create_or_update(
                 values, extra_values
             )
+            if extra_values.get('single_double_room') == 'double' and not \
+                    values.get('double_room_person'):
+                values['double_room_person'] = \
+                    'Double room selected without any indication.'
             values.update({
                 'stage_id': self.env.ref(
                     'website_event_compassion.stage_group_unconfirmed'
@@ -102,8 +174,14 @@ if not testing:
             })
 
         def form_next_url(self, main_object=None):
-            return '/event/{}/registration/{}/success'.format(
-                self.main_object.event_id.id, self.main_object.id)
+            return u'/event/{}/confirmation?title={}&message={}'.format(
+                self.main_object.compassion_event_id.id,
+                _("Thank you!"),
+                _("We are glad to confirm your registration to %s. "
+                  "You will receive all information for the next steps "
+                  "by e-mail.")
+                % self.main_object.compassion_event_id.name
+            )
 
         def _get_partner_vals(self, values, extra_values):
             # Add spoken languages

@@ -30,7 +30,7 @@
 # pylint: disable=C8101
 {
     'name': 'Compassion CH Partner Communications',
-    'version': '10.0.2.5.1',
+    'version': '10.0.4.0.0',
     'category': 'Other',
     'author': 'Compassion CH',
     'license': 'AGPL-3',
@@ -38,12 +38,11 @@
     'depends': [
         'report_compassion',
         'child_switzerland',
-        'partner_compassion',
         'sms_939',
         'auth_signup'
     ],
     'external_dependencies': {
-        'python': ['wand', 'detectlanguage', 'sendgrid', 'bs4']
+        'python': ['wand', 'detectlanguage', 'sendgrid', 'bs4', 'pdf2image']
     },
     'data': [
         'data/major_revision_emails.xml',
@@ -72,7 +71,8 @@
         'views/change_text_wizard_view.xml',
         'views/correspondence_view.xml',
         'views/generate_communication_wizard_view.xml',
-        'views/staff_notifications_settings_view.xml'
+        'views/staff_notifications_settings_view.xml',
+        'wizards/res_partner_create_portal_wizard.xml'
     ],
     'demo': [],
     'installable': True,

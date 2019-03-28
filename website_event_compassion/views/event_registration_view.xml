@@ -5,13 +5,16 @@
         <field name="model">event.registration</field>
         <field name="inherit_id" ref="event.view_event_registration_form"/>
         <field name="arch" type="xml">
-            <!-- Replace state widget by registration stage -->
-            <field name="state" position="attributes">
+            <button name="action_send_badge_email" position="attributes">
                 <attribute name="invisible">1</attribute>
-            </field>
-            <field name="state" position="after">
+            </button>
+            <button name="action_send_badge_email" position="after">
+                <button name="button_send_reminder" string="Send a reminder" type="object" states="open,done" class="oe_highlight"/>
+            </button>
+            <!-- Replace state widget by registration stage -->
+            <field name="state" position="replace">
                 <field name="stage_id" widget="statusbar" clickable="True"
-                       domain="['|', ('event_type_id', '=', context.get('default_event_type_id')), ('event_type_id', '=', False)]"
+                       domain="['|', ('event_type_ids', '=', context.get('default_event_type_id', False)), ('event_type_ids', '=', False)]"
                        options="{'fold_field': 'fold'}"
                 />
             </field>
@@ -21,17 +24,15 @@
             <field name="event_id" position="after">
                 <field name="compassion_event_id"/>
             </field>
+            <field name="partner_id" position="attributes">
+                <!-- Allow to change partner of registration -->
+                <attribute name="attrs"/>
+            </field>
             <field name="name" position="after">
+                <field name="state" readonly="0"/>
                 <field name="stage_date"/>
                 <field name="incomplete_task_ids" widget="many2many_tags"/>
                 <field name="completed_task_ids" widget="many2many_tags" domain="[('stage_id', '=', stage_id)]"/>
-            </field>
-            <field name="date_closed" position="after">
-                <field name="double_room_person"/>
-                <field name="include_flight"/>
-            </field>
-            <field name="partner_id" position="after">
-                <field name="comments"/>
             </field>
             <xpath expr="//sheet/group">
                 <field name="fundraising" invisible="1"/>
@@ -48,12 +49,17 @@
                     <field name="ambassador_picture_2" class="oe_avatar" options="{'size': [90, 90]}"/>
                 </group>
                 <group name="trip" string="Trip information">
+                    <field name="double_room_person"/>
+                    <field name="include_flight"/>
+                    <field name="comments"/>
                     <field name="birth_name"/>
+                    <field name="passport"/>
                     <field name="passport_number"/>
                     <field name="passport_expiration_date"/>
                     <field name="emergency_name"/>
                     <field name="emergency_phone"/>
                     <field name="emergency_relation_type"/>
+                    <field name="criminal_record"/>
                 </group>
             </xpath>
             <xpath expr="//sheet/group[1]" position="before">
@@ -63,6 +69,17 @@
                     </button>
                 </div>
             </xpath>
+        </field>
+    </record>
+
+    <record id="view_event_registration_tree_compassion" model="ir.ui.view">
+        <field name="name">event.registration.website.compassion.tree</field>
+        <field name="model">event.registration</field>
+        <field name="inherit_id" ref="event.view_event_registration_tree"/>
+        <field name="arch" type="xml">
+            <field name="state" position="before">
+                <field name="stage_id"/>
+            </field>
         </field>
     </record>
 
@@ -113,4 +130,20 @@
             </kanban>
         </field>
     </record>
+
+    <record model="ir.actions.server" id="event_registration_all_attended_action">
+        <field name="name">Action All Attended</field>
+        <field name="model_id" ref="model_event_registration"/>
+        <field name="code">
+            records.button_reg_close()
+        </field>
+    </record>
+    <record id="event_registration_all_attended" model="ir.values">
+        <field eval="'client_action_multi'" name="key2"/>
+        <field eval="'event.registration'" name="model"/>
+        <field name="name">Attended</field>
+        <field eval="'ir.actions.server,%d'%event_registration_all_attended_action"
+               name="value"/>
+    </record>
+
 </odoo>

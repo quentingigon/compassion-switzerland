@@ -139,7 +139,7 @@ class RecurringContract(models.Model):
         """
         Sends a communication to selected sponsorships.
         :param communication: the communication config to use
-        :param correspondant: put to false for sending to payer instead of
+        :param correspondent: put to false for sending to payer instead of
                               correspondent.
         :param both:          send to both correspondent and payer
                               (overrides the previous parameter)
@@ -209,6 +209,21 @@ class RecurringContract(models.Model):
             ])
             config = self.env.ref(module + 'planned_anniversary_' + str(year))
             anniversary.send_communication(config)
+
+        # Write & Pray reminders after 3 months of activation
+        logger.info("....Creating Write&Pray Reminders")
+        three_month_ago = today - relativedelta(months=3)
+        four_month_ago = today - relativedelta(months=4)
+        wrpr_sponsorships = self.search([
+            ('state', '=', 'active'),
+            ('type', '=', 'SC'),
+            ('activation_date', '<', fields.Date.to_string(three_month_ago)),
+            ('activation_date', '>=', fields.Date.to_string(four_month_ago)),
+        ])
+        config = self.env.ref(module + 'sponsorship_wrpr_reminder')
+        for sponsorship in wrpr_sponsorships:
+            if not sponsorship.sponsor_letter_ids:
+                sponsorship.send_communication(config)
 
     @api.model
     def send_daily_communication(self):
@@ -294,6 +309,7 @@ class RecurringContract(models.Model):
             ('activation_date', '<=', yesterday),
             ('start_date', '<=', five_days_diff),
             ('child_id', '!=', False),
+            ('type', '=', 'S'),
             ('origin_id.type', '!=', 'transfer'),
             ('welcome_active_letter_sent', '=', False)
         ])
@@ -323,35 +339,48 @@ class RecurringContract(models.Model):
         fifty_ago = today - relativedelta(days=50)
         twenty_ago = today - relativedelta(days=20)
         comm_obj = self.env['partner.communication.job']
-        for sponsorship in self.search([
+        search_domain = [
             ('state', 'in', ('active', 'mandate')),
             ('global_id', '!=', False),
             ('type', 'like', 'S'),
             '|',
             ('child_id.project_id.suspension', '!=', 'fund-suspended'),
-            ('child_id.project_id.suspension', '=', False),
-        ]):
-            if len(sponsorship.due_invoice_ids) > 1:
-                has_first_reminder = comm_obj.search_count([
-                    ('config_id', 'in', [first_reminder_config.id,
-                                         second_reminder_config.id]),
-                    ('state', '=', 'done'),
-                    ('object_ids', 'like', str(sponsorship.id)),
-                    ('sent_date', '>=', fields.Date.to_string(fifty_ago)),
-                    ('sent_date', '<', fields.Date.to_string(twenty_ago))
-                ])
-                if has_first_reminder:
-                    second_reminder += sponsorship
-                else:
-                    has_first_reminder = comm_obj.search_count([
-                        ('config_id', 'in', [first_reminder_config.id,
-                                             second_reminder_config.id]),
-                        ('state', '=', 'done'),
-                        ('object_ids', 'like', str(sponsorship.id)),
-                        ('sent_date', '>=', fields.Date.to_string(twenty_ago)),
-                    ])
-                    if not has_first_reminder:
-                        first_reminder += sponsorship
+            ('child_id.project_id.suspension', '=', False)
+        ]
+        # Recompute due invoices of multi-months payers, because
+        # due months are only recomputed when new invoices are generated
+        # which could take up to one year for yearly payers.
+        multi_month = self.search(
+            search_domain + [('group_id.advance_billing_months', '>', 3)]
+        )
+        multi_month.compute_due_invoices()
+        for sponsorship in self.search(
+            search_domain + [('months_due', '>', 1)]
+        ):
+            reminder_search = [
+                ('config_id', 'in', [first_reminder_config.id,
+                                     second_reminder_config.id]),
+                ('state', '=', 'done'),
+                ('object_ids', 'like', str(sponsorship.id))
+            ]
+            # Look if first reminder was sent previous month (send second
+            # reminder in that case)
+            has_first_reminder = comm_obj.search_count(
+                reminder_search +
+                [('sent_date', '>=', fields.Date.to_string(fifty_ago)),
+                 ('sent_date', '<', fields.Date.to_string(twenty_ago))]
+            )
+            if has_first_reminder:
+                second_reminder += sponsorship
+            else:
+                # Send first reminder only if one was not already sent less
+                # than twenty days ago
+                has_first_reminder = comm_obj.search_count(
+                    reminder_search +
+                    [('sent_date', '>=', fields.Date.to_string(twenty_ago))]
+                )
+                if not has_first_reminder:
+                    first_reminder += sponsorship
         first_reminder.send_communication(first_reminder_config,
                                           correspondent=False)
         second_reminder.send_communication(second_reminder_config,
@@ -461,6 +490,11 @@ class RecurringContract(models.Model):
         ]).unlink()
         # This prevents sending welcome e-mail if it's already active
         self.write({'sds_state': 'active'})
+        # Send new dossier for write&pray sponsorships
+        self.filtered(lambda s: s.type == 'SC').send_communication(
+            self.env.ref('partner_communication_switzerland'
+                         '.sponsorship_dossier_wrpr')
+        )
         return super(RecurringContract, self).contract_active()
 
     @api.multi

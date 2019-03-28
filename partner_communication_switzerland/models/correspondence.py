@@ -40,7 +40,7 @@ class Correspondence(models.Model):
         'partner.communication.job', 'Communication')
     email_id = fields.Many2one(
         'mail.mail', 'E-mail', related='communication_id.email_id',
-        store=True)
+        store=True, index=True)
     communication_state = fields.Selection(related='communication_id.state')
     sent_date = fields.Datetime(
         'Communication sent', related='communication_id.sent_date',
@@ -126,20 +126,23 @@ class Correspondence(models.Model):
         to the first letter, so that he can only download this zip.
         :return: True
         """
-        _zip = self.env['correspondence.download.wizard'].with_context(
-            active_model=self._name, active_ids=self.ids).create({})
-        self.write({'zip_file': False})
-        letter_zip = self[0]
-        other_letters = self - letter_zip
+        if len(self) == 1:
+            letter_attach = self
+        else:
+            _zip = self.env['correspondence.download.wizard'].with_context(
+                active_model=self._name, active_ids=self.ids).create({})
+            self.write({'zip_file': False})
+            letter_attach = self[:1]
+            letter_attach.write({
+                'zip_file': _zip.download_data,
+                'letter_format': 'zip'
+            })
         base_url = self.env['ir.config_parameter'].get_param(
             'web.external.url')
-        letter_zip.write({
-            'zip_file': _zip.download_data,
+        self.write({
             'read_url': "{}/b2s_image?id={}".format(base_url,
-                                                    letter_zip.uuid),
-            'letter_format': 'zip'
+                                                    letter_attach.uuid),
         })
-        other_letters.write({'read_url': False, 'zip_file': False})
         return True
 
     @api.multi
@@ -202,13 +205,21 @@ class Correspondence(models.Model):
         return True
 
     @api.multi
-    def get_multi_mode(self):
+    def send_unread_b2s(self):
         """
-        Tells if we should send the communication with a zip download link
-        or with each pdf attached
-        :return: true if multi mode should be used
+        IR Action Rule called 3 days after correspondence is not opened
+        by e-mail. It will create a new communication to send it by post.
+        :return: True
         """
-        return len(self) > 3
+        unread_config = self.env.ref(
+            'partner_communication_switzerland.child_letter_unread')
+        for letter in self:
+            self.env['partner.communication.job'].create({
+                'partner_id': letter.partner_id.id,
+                'config_id': unread_config.id,
+                'object_ids': letter.id
+            })
+        return True
 
     ##########################################################################
     #                             PRIVATE METHODS                            #

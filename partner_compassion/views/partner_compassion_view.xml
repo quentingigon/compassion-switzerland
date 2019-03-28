@@ -107,7 +107,6 @@
                             <field name="photo_delivery_preference"/>
                         </group>
                         <group>
-                            <field name="abroad"/>
                             <field name="opt_out"/>
                             <field name="send_original"/>
                             <field name="mandatory_review"/>
@@ -263,6 +262,10 @@
         <field name="model">res.partner</field>
         <field name="inherit_id" ref="base.view_res_partner_filter"/>
         <field name="arch" type="xml">
+            <!-- Use fuzzy search on name -->
+            <field name="name" position="replace">
+                <field name="name" filter_domain="['|','|',('name','%',self),('ref','=',self),('email','ilike',self)]"/>
+            </field>
             <field name="category_id" position="after">
                 <field name="lang"/>
                 <field name="city" filter_domain="['|',('city','ilike', self),('zip','ilike',self)]"/>
@@ -391,20 +394,6 @@
             </field>
         </field>
     </record>
-    <!-- Add security on website button -->
-    <record model="ir.ui.view" id="partner_website_security">
-        <field name="name">res.partner.website.security</field>
-        <field name="model">res.partner</field>
-        <field name="inherit_id" ref="website_partner.view_partners_form_website"/>
-        <field name="arch" type="xml">
-            <button name="website_publish_button" position="attributes">
-                <attribute name="groups">base.group_user</attribute>
-            </button>
-            <field name="website_published" position="attributes">
-                <attribute name="groups">base.group_user</attribute>
-            </field>
-        </field>
-    </record>
 
     <record id="view_partner_form_invoice_button_ch" model="ir.ui.view">
         <field name="name">res.partner.form.invoice.switzerland</field>
@@ -429,6 +418,29 @@
             </field>
         </field>
     </record>
+
+    <!-- Add child protection charter agreement fields -->
+    <record id="view_res_partner_child_protection_charter_form" model="ir.ui.view">
+        <field name="name">res.partner.child_protection_charter.form</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="sponsorship_compassion.view_res_partner_invoice_line_button_form"/>
+        <field name="arch" type="xml">
+            <field name="privacy_statement_ids" position="after">
+                <group string="Child Protection Charter Agreement" name="child_protection_charter_fields">
+                    <field string="Has agreed" name="has_agreed_child_protection_charter" readonly="1"/>
+                    <field string="Date agreed" name="date_agreed_child_protection_charter" readonly="1"/>
+                </group>
+            </field>
+        </field>
+    </record>
+
+    <record id="agree_to_child_protection_charter_item" model="ir.values">
+        <field eval="'client_action_multi'" name="key2"/>
+        <field name="model">res.partner</field>
+        <field name="name">Has agreed to the child protection charter item</field>
+        <field eval="'ir.actions.server,%d'%agree_to_child_protection_charter_action" name="value"/>
+    </record>
+
     <!-- Delete Contacts Top Menu -->
     <delete model="ir.ui.menu" id="mail.menu_contacts"/>
 

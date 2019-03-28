@@ -30,7 +30,7 @@
 # pylint: disable=C8101
 {
     'name': 'Upgrade Partners for Compassion Suisse',
-    'version': '10.0.1.8.0',
+    'version': '10.0.2.2.0',
     'category': 'Partner',
     'author': 'Compassion CH',
     'license': 'AGPL-3',
@@ -45,8 +45,9 @@
         'base_geolocalize',
         'web_notify',
         'partner_survey',
-        'website_partner',
-        'partner_contact_in_several_companies'
+        'partner_contact_in_several_companies',
+        'crm_claim',
+        'base_search_fuzzy',
     ],
     'external_dependencies': {
         'python': ['pandas', 'pyminizip', 'sendgrid']
@@ -58,11 +59,18 @@
         'data/advocate_engagement_data.xml',
         'data/calendar_event_type.xml',
         'data/ir_cron.xml',
+        'data/mail_channel.xml',
+        'data/res_partner_actions.xml',
+        'data/gist_indexes.xml',
         'views/advocate_details.xml',
         'views/partner_compassion_view.xml',
         'views/product_view.xml',
         'views/partner_check_double.xml',
         'views/notification_settings_view.xml',
+        'templates/child_protection_charter.xml'
+    ],
+    'qweb': [
+        'static/src/xml/thread_custom.xml'
     ],
     'installable': True,
     'auto_install': False,

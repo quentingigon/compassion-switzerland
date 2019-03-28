@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
-    <!-- Add text for donation receipts -->
     <record id="view_event_event_wordpress" model="ir.ui.view">
         <field name="name">event.event.website.compassion.form</field>
         <field name="model">event.event</field>
         <field name="inherit_id" ref="event_sale.view_event_form_inherit_ticket"/>
         <field name="arch" type="xml">
+            <button name="button_confirm" position="before">
+                <button string="Create Information Party" name="button_info_party" type="object" class="oe_highlight" groups="base.group_user" attrs="{'invisible': ['|', ('event_type_id', '!=', %(website_event_compassion.event_type_group_visit)d), ('state', '!=', 'confirm')]}"/>
+            </button>
             <xpath expr="//div[@name='button_box']/button[2]" position="attributes">
                 <attribute name="context">{'default_amount_objective': participants_amount_objective, 'default_event_type_id': event_type_id}</attribute>
             </xpath>
@@ -62,7 +64,7 @@
                 <field name="communication_id"/>
             </xpath>
             <xpath expr="//field[@name='event_mail_ids']//field[@name='interval_type']" position="after">
-                <field name="stage_id" domain="['|', ('event_type_id', '=', parent.event_type_id), ('event_type_id', '=', False)]" attrs="{'required': [('interval_type', '=', 'after_stage')]}"/>
+                <field name="stage_id" domain="['|', ('event_type_ids', '=', parent.event_type_id), ('event_type_ids', '=', False)]" attrs="{'required': [('interval_type', '=', 'after_stage')]}"/>
             </xpath>
         </field>
     </record>
@@ -74,7 +76,14 @@
         <field name="arch" type="xml">
             <field name="name" position="after">
                 <field name="accepts_registrations"/>
+                <field name="travel_features"/>
             </field>
+            <xpath expr="/form/sheet" position="after">
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" widget="mail_followers" groups="base.group_user"/>
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
+            </xpath>
         </field>
     </record>
 </odoo>

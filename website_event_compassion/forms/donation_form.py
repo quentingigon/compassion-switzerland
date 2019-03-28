@@ -18,7 +18,7 @@ if not testing:
 
     class EventDonationForm(models.AbstractModel):
         _name = 'cms.form.event.donation'
-        _inherit = ['cms.form.payment', 'cms.form.event.match.partner']
+        _inherit = ['cms.form.payment', 'cms.form.match.partner']
 
         # The form is inside a Muskathlon participant details page
         form_buttons_template = 'cms_form_compassion.modal_form_buttons'
@@ -90,7 +90,9 @@ if not testing:
                     'product_id': product.id,
                     'account_analytic_id': event.analytic_id.id,
                     'user_id': ambassador.id
-                })]
+                })],
+                'type': 'out_invoice',
+                'date_invoice': fields.Date.today(),
             })
 
         def _form_create(self, values):

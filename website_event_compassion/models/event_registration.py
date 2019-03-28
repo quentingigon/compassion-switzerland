@@ -8,6 +8,8 @@
 #
 ##############################################################################
 import uuid
+import logging
+import base64
 
 from datetime import date
 
@@ -18,9 +20,30 @@ from odoo.tools import config, file_open
 
 from odoo.addons.queue_job.job import job
 
+_logger = logging.getLogger(__name__)
+
 # kanban colors
 RED = 2
 GREEN = 5
+
+try:
+    import magic
+except ImportError:
+    _logger.error("Please install magic to use website_event_compassion")
+
+
+def _get_file_type(data):
+    ftype = magic.from_buffer(base64.b64decode(data), True)
+    if 'pdf' in ftype:
+        return '.pdf'
+    elif 'tiff' in ftype:
+        return '.tiff'
+    elif 'jpeg' in ftype:
+        return '.jpg'
+    elif 'png' in ftype:
+        return '.png'
+    else:
+        return ''
 
 
 class Event(models.Model):
@@ -39,13 +62,13 @@ class Event(models.Model):
     )
     stage_id = fields.Many2one(
         'event.registration.stage', 'Stage', track_visibility='onchange',
-        index=True,
-        domain="['|', ('event_type_id', '=', False),"
-               "      ('event_type_id', '=', event_type_id)]",
+        index=True, copy=False,
+        domain="['|', ('event_type_ids', '=', False),"
+               "      ('event_type_ids', '=', event_type_id)]",
         group_expand='_read_group_stage_ids',
         default=lambda r: r._default_stage()
     )
-    stage_date = fields.Date(default=fields.Date.today)
+    stage_date = fields.Date(default=fields.Date.today, copy=False)
     stage_task_ids = fields.Many2many(
         'event.registration.task', 'event_registration_stage_tasks',
         compute='_compute_stage_tasks'
@@ -61,7 +84,7 @@ class Event(models.Model):
              'current stage of his registration.')
     completed_task_ids = fields.Many2many(
         'event.registration.task', 'event_registration_completed_tasks',
-        string='Completed tasks',
+        string='Completed tasks', copy=False,
         help='This shows all tasks that the participant completed for his '
              'registration.')
     color = fields.Integer(compute='_compute_kanban_color')
@@ -88,7 +111,7 @@ class Event(models.Model):
     host_url = fields.Char(compute='_compute_host_url')
     wordpress_host = fields.Char(compute='_compute_wordpress_host')
     event_name = fields.Char(related='event_id.name')
-    uuid = fields.Char(default=lambda self: self._get_uuid())
+    uuid = fields.Char(default=lambda self: self._get_uuid(), copy=False)
     include_flight = fields.Boolean()
     double_room_person = fields.Char('Double room with')
 
@@ -123,12 +146,15 @@ class Event(models.Model):
     emergency_ok = fields.Boolean(compute='_compute_step2_tasks')
     criminal_record_uploaded = fields.Boolean(
         compute='_compute_step2_tasks')
-    criminal_record = fields.Binary(attachment=True)
-    medical_discharge = fields.Binary(attachment=True)
+    criminal_record = fields.Binary(compute='_compute_criminal_record',
+                                    inverse='_inverse_criminal_record')
+    medical_discharge = fields.Binary(attachment=True, copy=False)
     medical_survey_id = fields.Many2one(
-        'survey.user_input', 'Medical survey')
+        'survey.user_input', 'Medical survey', copy=False)
+    feedback_survey_id = fields.Many2one(
+        'survey.user_input', 'Feedback survey', copy=False)
     requires_medical_discharge = fields.Boolean(
-        compute='_compute_requires_medical_discharge', store=True
+        compute='_compute_requires_medical_discharge', store=True, copy=False
     )
 
     # Travel info
@@ -148,13 +174,17 @@ class Event(models.Model):
         ('other', 'Other')
     ], string='Emergency contact relation type')
     birth_name = fields.Char()
+    passport = fields.Binary(
+        compute='_compute_passport', inverse='_inverse_passport')
     passport_number = fields.Char()
     passport_expiration_date = fields.Date()
 
     # Payment fields
     ################
-    down_payment_id = fields.Many2one('account.invoice', 'Down payment')
-    group_visit_invoice_id = fields.Many2one('account.invoice', 'Trip invoice')
+    down_payment_id = fields.Many2one(
+        'account.invoice', 'Down payment', copy=False)
+    group_visit_invoice_id = fields.Many2one(
+        'account.invoice', 'Trip invoice', copy=False)
 
     survey_count = fields.Integer(compute='_compute_survey_count')
 
@@ -214,17 +244,17 @@ class Event(models.Model):
             registration.wordpress_host = host
 
     @api.multi
-    @api.depends('state')
+    @api.depends('state', 'event_id.state')
     def _compute_website_published(self):
         for registration in self:
             registration.website_published = registration.state in (
-                'open', 'done')
+                'open', 'done') and registration.event_id.state == 'confirm'
 
     @api.multi
     def _compute_partner_display_name(self):
         for registration in self:
             registration.partner_display_name = \
-                registration.partner_firstname + ' ' + \
+                (registration.partner_firstname or '') + ' ' + \
                 registration.partner_lastname
 
     @api.multi
@@ -258,11 +288,11 @@ class Event(models.Model):
         type_id = self._context.get('default_event_type_id')
         if type_id:
             search_domain = ['|', ('id', 'in', stages.ids), '|',
-                             ('event_type_id', '=', False),
-                             ('event_type_id', '=', type_id)]
+                             ('event_type_ids', '=', False),
+                             ('event_type_ids', '=', type_id)]
         else:
             search_domain = ['|', ('id', 'in', stages.ids),
-                             ('event_type_id', '=', False)]
+                             ('event_type_ids', '=', False)]
 
         # perform search
         stage_ids = stages._search(search_domain, order=order,
@@ -274,12 +304,12 @@ class Event(models.Model):
         type_id = self._context.get('default_event_type_id')
         if type_id:
             stage = self.env['event.registration.stage'].search([
-                '|', ('event_type_id', '=', type_id),
-                ('event_type_id', '=', False)
+                '|', ('event_type_ids', '=', type_id),
+                ('event_type_ids', '=', False)
             ], limit=1)
         else:
             stage = self.env['event.registration.stage'].search([
-                ('event_type_id', '=', False)
+                ('event_type_ids', '=', False)
             ], limit=1)
         return stage.id
 
@@ -331,6 +361,76 @@ class Event(models.Model):
             else:
                 registration.requires_medical_discharge = False
 
+    def _compute_passport(self):
+        for registration in self:
+            registration.passport = self.env['ir.attachment'].search([
+                ('name', 'like', 'Passport'),
+                ('res_id', '=', registration.id),
+                ('res_model', '=', self._name)
+            ], limit=1).datas
+
+    def _inverse_passport(self):
+        attachment_obj = self.env['ir.attachment']
+        for registration in self:
+            passport = registration.passport
+            if passport:
+                name = 'Passport ' + registration.name + _get_file_type(
+                    passport)
+                attachment_obj.create({
+                    'datas_fname': name,
+                    'res_model': self._name,
+                    'res_id': registration.id,
+                    'datas': passport,
+                    'name': name,
+                })
+                self.write({
+                    'completed_task_ids': [
+                        (4, self.env.ref(
+                            'website_event_compassion.task_passport').id),
+                    ]
+                })
+            else:
+                attachment_obj.search([
+                    ('name', 'like', 'Passport'),
+                    ('res_id', '=', registration.id),
+                    ('res_model', '=', self._name)
+                ]).unlink()
+
+    def _compute_criminal_record(self):
+        for registration in self:
+            registration.criminal_record = self.env['ir.attachment'].search([
+                ('name', 'like', 'Criminal record'),
+                ('res_id', '=', registration.id),
+                ('res_model', '=', self._name)
+            ], limit=1).datas
+
+    def _inverse_criminal_record(self):
+        attachment_obj = self.env['ir.attachment']
+        for registration in self:
+            criminal_record = registration.criminal_record
+            if criminal_record:
+                name = 'Criminal record ' + registration.name + \
+                    _get_file_type(criminal_record)
+                attachment_obj.create({
+                    'datas_fname': name,
+                    'res_model': self._name,
+                    'res_id': registration.id,
+                    'datas': criminal_record,
+                    'name': name,
+                })
+                self.write({
+                    'completed_task_ids': [
+                        (4, self.env.ref(
+                            'website_event_compassion.task_criminal').id),
+                    ]
+                })
+            else:
+                attachment_obj.search([
+                    ('name', 'like', 'Criminal record'),
+                    ('res_id', '=', registration.id),
+                    ('res_model', '=', self._name)
+                ]).unlink()
+
     ##########################################################################
     #                              ORM METHODS                               #
     ##########################################################################
@@ -339,11 +439,16 @@ class Event(models.Model):
         if 'stage_id' in vals:
             vals['stage_date'] = fields.Date.today()
         res = super(Event, self).write(vals)
+        module = 'website_event_compassion.'
         # Push registration to next stage if all tasks are complete
         if 'completed_task_ids' in vals:
             for registration in self:
                 if not registration.incomplete_task_ids:
                     registration.next_stage()
+                if vals.get('stage_id') == self.env.ref(
+                        module + 'stage_all_attended'
+                ).id and registration.event_type_id.travel_features:
+                    registration.prepare_feedback_survey()
         return res
 
     @api.model
@@ -365,6 +470,27 @@ class Event(models.Model):
             'stage_id': self.env.ref(
                 'website_event_compassion.stage_all_unconfirmed').id
         })
+
+    @api.multi
+    def button_send_reminder(self):
+        """ Create a communication job with a chosen communication config"""
+
+        ctx = {
+            'partner_id': self.partner_id_id,
+            'object_ids': self.ids
+        }
+
+        return {
+            'name': _('Choose a communication'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'event.registration.communication.wizard',
+            'view_id': self.env.ref(
+                'website_event_compassion.'
+                'event_registration_communication_wizard_form').id,
+            'view_mode': 'form',
+            'target': 'new',
+            'context': ctx
+        }
 
     @api.multi
     def button_reg_close(self):
@@ -414,8 +540,9 @@ class Event(models.Model):
             next_stage = self.env['event.registration.stage'].search([
                 ('sequence', '>', registration.stage_id.sequence),
                 '|',
-                ('event_type_id', '=', registration.stage_id.event_type_id.id),
-                ('event_type_id', '=', False)
+                ('event_type_ids', 'in',
+                 registration.stage_id.event_type_ids.ids),
+                ('event_type_ids', '=', False)
             ], limit=1)
             if next_stage:
                 registration.write({
@@ -431,6 +558,8 @@ class Event(models.Model):
             elif next_stage == self.env.ref(
                     'website_event_compassion.stage_group_medical'):
                 registration.prepare_medical_survey()
+        # Send potential communications after stage transition
+        self.env['event.mail'].with_delay().run_job()
         return True
 
     def prepare_down_payment(self):
@@ -449,9 +578,12 @@ class Event(models.Model):
                 'name': name,
                 'product_id': product.id,
                 'account_analytic_id': event.analytic_id.id,
-            })]
+            })],
+            'type': 'out_invoice',
+            'reference': product.generate_bvr_reference(self.partner_id),
         })
-        invoice.action_invoice_open()
+        if self.partner_id.state == 'active':
+            invoice.action_invoice_open()
         self.down_payment_id = invoice
 
     def prepare_group_visit_payment(self):
@@ -502,14 +634,20 @@ class Event(models.Model):
         invoice = self.env['account.invoice'].create({
             'origin': name,
             'partner_id': self.partner_id.id,
-            'invoice_line_ids': [(0, 0, invl) for invl in invl_vals]
+            'invoice_line_ids': [(0, 0, invl) for invl in invl_vals],
+            'type': 'out_invoice',
+            'reference': product.generate_bvr_reference(self.partner_id)
         })
-        invoice.action_invoice_open()
+        if self.partner_id.state == 'active':
+            invoice.action_invoice_open()
         self.group_visit_invoice_id = invoice
 
     def prepare_medical_survey(self):
         # Attach medical survey for user
+        self.ensure_one()
         survey = self.event_id.medical_survey_id
+        if not survey:
+            return
         local_context = survey.action_send_survey().get('context')
         wizard = self.env['survey.mail.compose.message']\
             .with_context(local_context).create({
@@ -521,7 +659,26 @@ class Event(models.Model):
         self.medical_survey_id = self.env['survey.user_input'].search([
             ('partner_id', '=', self.partner_id_id),
             ('survey_id', '=', survey.id)
-        ])
+        ], limit=1)
+
+    def prepare_feedback_survey(self):
+        # Attach feedback survey for user
+        self.ensure_one()
+        survey = self.event_id.feedback_survey_id
+        if not survey:
+            return
+        local_context = survey.action_send_survey().get('context')
+        wizard = self.env['survey.mail.compose.message']\
+            .with_context(local_context).create({
+                'public': 'no_email',
+                'phone_partner_ids': [(6, 0, self.partner_id.ids)],
+            })
+        wizard.onchange_template_id_wrapper()
+        wizard.add_new_answer()
+        self.feedback_survey_id = self.env['survey.user_input'].search([
+            ('partner_id', '=', self.partner_id_id),
+            ('survey_id', '=', survey.id)
+        ], limit=1)
 
     def send_medical_discharge(self):
         discharge_config = self.env.ref(
@@ -560,3 +717,10 @@ class Event(models.Model):
                     'website_event_compassion.task_medical_discharge').id),
             ]
         })
+
+    def _track_subtype(self, init_values):
+        self.ensure_one()
+        if 'user_id' in init_values and init_values['user_id'] is False:
+            # When the registration is created.
+            return 'website_event_compassion.mt_registration_create'
+        return super(Event, self)._track_subtype(init_values)

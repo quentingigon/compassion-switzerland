@@ -17,6 +17,7 @@ from dateutil.relativedelta import relativedelta
 from odoo.exceptions import UserError
 from odoo.tools import mod10r
 from odoo.addons.child_compassion.models.compassion_hold import HoldType
+from odoo.addons.queue_job.job import job, related_action
 
 from odoo import api, models, fields, _
 
@@ -27,6 +28,7 @@ class RecurringContracts(models.Model):
     _inherit = 'recurring.contract'
 
     first_open_invoice = fields.Date(compute='_compute_first_open_invoice')
+    mandate_date = fields.Datetime(string='State last time mandate')
     has_mandate = fields.Boolean(compute='_compute_has_mandate')
     church_id = fields.Many2one(
         related='partner_id.church_id', readonly=True
@@ -199,6 +201,13 @@ class RecurringContracts(models.Model):
         Update partner to add the 'Sponsor' category
         """
         super(RecurringContracts, self).contract_active()
+        # Check if partner is active
+        need_validation = self.filtered(
+            lambda s: s.partner_id.state != 'active')
+        if need_validation:
+            raise UserError(_(
+                'Please verify the partner before validating the sponsorship'))
+
         sponsor_cat_id = self.env.ref(
             'partner_compassion.res_partner_category_sponsor').id
         old_sponsor_cat_id = self.env.ref(
@@ -211,7 +220,6 @@ class RecurringContracts(models.Model):
         partners = sponsorships.mapped('partner_id') | sponsorships.mapped(
             'correspondent_id')
         partners.write(add_sponsor_vals)
-        partners.update_church_sponsorships_number()
         return True
 
     @api.multi
@@ -223,7 +231,8 @@ class RecurringContracts(models.Model):
             raise UserError(_(
                 'Please verify the partner before validating the sponsorship'))
         self.write({
-            'state': 'mandate'
+            'state': 'mandate',
+            'mandate_date': fields.Datetime.now()
         })
         for contract in self.filtered(lambda s: 'S' in s.type and
                                       s.child_id.hold_id):
@@ -267,19 +276,6 @@ class RecurringContracts(models.Model):
 
         super(RecurringContracts, self-sponsorships).contract_waiting()
         return True
-
-    @api.multi
-    def invoice_paid(self, invoice):
-        """ In case the first invoice is paid but contract is waiting mandate
-        the sponsorship should still be activated.
-        """
-        contracts = self.filtered(
-            lambda c: c.child_id and c.state == 'mandate' and not
-            c.global_id)
-        contracts.contract_active()
-        # Put contracts back in waiting mandate after they have been activated
-        contracts.write({'state': 'mandate'})
-        return super(RecurringContracts, self).invoice_paid(invoice)
 
     ##########################################################################
     #                             PRIVATE METHODS                            #
@@ -366,9 +362,6 @@ class RecurringContracts(models.Model):
                     'category_id': [(3, sponsor_cat_id),
                                     (4, old_sponsor_cat_id)]})
 
-        partners = self.mapped('partner_id') | self.mapped('correspondent_id')
-        partners.update_church_sponsorships_number()
-
     def _on_change_group_id(self, group_id):
         """ Change state of contract if payment is changed to/from LSV or DD.
         """
@@ -421,3 +414,20 @@ class RecurringContracts(models.Model):
             delay = datetime.now() + relativedelta(seconds=15)
             if invoices:
                 invoices.with_delay(eta=delay).group_or_split_reconcile()
+
+    @api.multi
+    @job(default_channel='root.recurring_invoicer')
+    @related_action(action='related_action_contract')
+    def _clean_invoices(self, since_date=None, to_date=None, keep_lines=None,
+                        clean_invoices_paid=True):
+        today = datetime.today()
+        # Free invoices from debit orders to avoid the job failing
+        inv_lines = self.mapped('invoice_line_ids').filtered(
+            lambda r: r.state == 'open' or (
+                r.state == 'paid' and
+                fields.Datetime.from_string(r.due_date) > today))
+
+        inv_lines.mapped('invoice_id').cancel_payment_lines()
+
+        return super(RecurringContracts, self)._clean_invoices(
+            since_date, to_date, keep_lines, clean_invoices_paid)
