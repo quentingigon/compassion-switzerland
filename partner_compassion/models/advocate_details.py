@@ -75,11 +75,10 @@ class AdvocateDetails(models.Model, geo_model.GeoModel):
         'advocate_details_id', 'engagement_id', 'Engagement type'
     )
     t_shirt_size = fields.Selection([
-        ('XS', 'XS'), ('S', 'S'), ('M', 'M'), ('L', 'L'), ('XL', 'XL'),
+        ('S', 'S'), ('M', 'M'), ('L', 'L'), ('XL', 'XL'),
         ('XXL', 'XXL')
     ])
     t_shirt_type = fields.Selection([
-        ('singlet', 'Singlet'),
         ('shirt', 'Shirt'),
         ('bikeshirt', 'Bikeshirt'),
     ])
@@ -227,6 +226,9 @@ class AdvocateDetails(models.Model, geo_model.GeoModel):
             ('state', 'in', ['active', 'on_break']),
             ('birthdate', 'like', three_open_days.strftime('%m-%d'))
         ])
+        birthday_advocates = birthday_advocates.filtered(
+            lambda a: a.engagement_ids != self.env.ref(
+                "partner_compassion.engagement_sport"))
         for advocate in birthday_advocates:
             notify_partner_id = self.env['staff.notification.settings'].\
                 get_param(
@@ -236,7 +238,7 @@ class AdvocateDetails(models.Model, geo_model.GeoModel):
                 body=_(u"This is a reminder that {} will have birthday on {}.")
                 .format(advocate.partner_id.preferred_name,
                         advocate.partner_id.get_date(
-                            'birthdate_date', 'date_month')),
+                            'birthdate_date', '%d %B')),
                 subject=_(u"[{}] Advocate birthday reminder").format(
                     advocate.display_name),
                 partner_ids=[notify_partner_id],
