@@ -90,7 +90,9 @@ class Contracts(models.Model):
             form_data['Child reference'] = child_local_id
             match_obj = self.env['res.partner.match.wp']
 
-            partner_infos = {}
+            partner_infos = {
+                'company_id': self.env.user.company_id.id
+            }
             for wp_field, odoo_field in SPONSOR_MAPPING.iteritems():
                 partner_infos[odoo_field] = form_data.get(wp_field)
 
@@ -178,10 +180,10 @@ class Contracts(models.Model):
         :return: <recurring.contract> record
         """
         sponsorship = self.env['recurring.contract'].create(values)
-        ambassador_match = re.match(r'^msk_(\d{1,8})', form_data[
-            'consumer_source_text'])
-        event_match = re.match(r'^msk_(\d{1,8})', form_data[
-            'consumer_source'])
+        ambassador_match = re.match(r'^msk_(\d{1,8})', form_data.get(
+            'consumer_source_text', ''))
+        event_match = re.match(r'^msk_(\d{1,8})', form_data.get(
+            'consumer_source', ''))
         # The sponsorships consumer_source fields were set automatically due
         # to a redirect from the sponsorship button on the muskathlon page.
         if ambassador_match and event_match:
