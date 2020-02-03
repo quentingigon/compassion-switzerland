@@ -23,6 +23,7 @@ partner-contact
 server-ux
 crm
 geospatial https://github.com/josueBulle/geospatial 11.0-mig-geoengine_partner
+geoengine_base_geolocalize
 partner-contact
 queue
 report-print-send
