@@ -12,11 +12,11 @@ import tempfile
 import uuid
 
 from ast import literal_eval
-from odoo import api, registry, fields, models, _
+from odoo import api, registry, fields, _
 from odoo.tools import mod10r
 from odoo.tools.config import config
 from odoo.addons.base_geoengine.fields import GeoPoint
-from odoo.addons.base_geoengine import fields as geo_fields
+from odoo.addons.base_geoengine import geo_model
 
 # fields that are synced if 'use_parent_address' is checked
 ADDRESS_FIELDS = [
@@ -33,7 +33,7 @@ except ImportError:
     logger.warning("Please install python dependencies.", exc_info=True)
 
 
-class ResPartner(models.Model):
+class ResPartner(geo_model.GeoModel):
     """ This class upgrade the partners to match Compassion needs.
         It also synchronize all changes with the MySQL server of GP.
     """
@@ -111,7 +111,6 @@ class ResPartner(models.Model):
         help="The date and time when the partner has agreed to the child"
              "protection charter."
     )
-    geo_point = geo_fields.GeoPoint(copy=False)
 
     # add track on fields from module base
     email = fields.Char(track_visibility='onchange')
@@ -122,6 +121,17 @@ class ResPartner(models.Model):
     lastname = fields.Char(track_visibility='onchange')
     # module mail
     opt_out = fields.Boolean(track_visibility='onchange')
+
+    # Surveys
+    survey_input_lines = fields.One2many(
+        comodel_name='survey.user_input_line', inverse_name='partner_id',
+        string='Surveys answers')
+    survey_inputs = fields.One2many(
+        comodel_name='survey.user_input', inverse_name='partner_id',
+        string='Surveys')
+    survey_input_count = fields.Integer(
+        string='Survey number', compute='_compute_survey_input_count',
+        store=True)
 
     ##########################################################################
     #                             FIELDS METHODS                             #
@@ -163,6 +173,11 @@ class ResPartner(models.Model):
         Update the sponsorship number for the related church as well.
         """
         return super().update_number_sponsorships()
+
+    @api.depends('survey_inputs')
+    def _compute_survey_input_count(self):
+        for survey in self:
+            survey.survey_input_count = len(survey.survey_inputs)
 
     ##########################################################################
     #                              ORM METHODS                               #
@@ -239,6 +254,8 @@ class ResPartner(models.Model):
         if fuzzy_search:
             order = self.env.cr.mogrify(
                 "similarity(res_partner.name, %s) DESC", [fuzzy_search])
+        if order and isinstance(order, bytes):
+            order = order.decode("utf-8")
         return super().search(
             args, offset, limit, order, count)
 
@@ -422,10 +439,12 @@ class ResPartner(models.Model):
                 pyminizip.uncompress(
                     src_zip_file.name, SmbConfig.file_pw, zip_dir, 0)
                 csv_path = zip_dir + '/partner_data.csv'
-                with open(csv_path, 'ab') as csv_file:
+                with open(csv_path, 'a', newline='', encoding='utf-8') as csv_file:
                     csv_writer = csv.writer(csv_file)
                     csv_writer.writerow([
-                        str(self.id), self.ref, self.contact_address,
+                        str(self.id),
+                        self.ref,
+                        self.contact_address,
                         fields.Date.today()
                     ])
                 dst_zip_file = tempfile.NamedTemporaryFile()

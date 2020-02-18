@@ -35,20 +35,20 @@
     'license': 'AGPL-3',
     'website': 'http://www.compassion.ch',
     'depends': [
+        'geoengine_base_geolocalize',            # geospatialslac
         'account_banking_mandate',               # oca_addons/bank-payment
         'sbc_compassion',                        # compassion-modules
         'thankyou_letters',                      # compassion-modules
         'mail_sendgrid',
         'partner_contact_birthdate',             # oca_addons/partner-contact
-        'geoengine_partner',
-        'base_geolocalize',                      # source/addons/geolocalize
         'web_notify',                            # oca_addons/web
         'partner_contact_in_several_companies',  # oca_addons/partner-contact
         'crm_claim',
         'base_search_fuzzy',                     # oca_addons/server-tools
         'cms_form_compassion',                   # compassion-modules
         'survey',                                # source/addons
-        'base_phone'                             # oca_addons/connector-telephony
+        'base_phone',                             # oca_addons/connector-telephony
+        'auditlog'
     ],
     'external_dependencies': {
         'python': ['pandas', 'pyminizip', 'sendgrid']
@@ -64,11 +64,11 @@
         'data/res_partner_actions.xml',
         'data/gist_indexes.xml',
         'views/advocate_details.xml',
+        'views/survey_user_input_action.xml',
         'views/partner_compassion_view.xml',
         'views/product_view.xml',
         'views/partner_check_double.xml',
         'views/notification_settings_view.xml',
-        'views/res_partner_view.xml',
         'templates/child_protection_charter.xml'
     ],
     'qweb': [
