@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -14,7 +13,7 @@ from odoo.exceptions import UserError
 
 
 class Event(models.Model):
-    _inherit = ['event.event', 'translatable.model']
+    _inherit = ['event.event', 'translatable.model', 'mail.activity.mixin']
     _name = 'event.event'
 
     compassion_event_id = fields.Many2one(
@@ -69,6 +68,9 @@ class Event(models.Model):
         'res.country.vaccine', string='Vaccines',
         related='compassion_event_id.country_id.vaccine_ids'
     )
+    event_ticket_ids = fields.One2many(
+        'event.event.ticket', 'event_id', string='Event Ticket',
+        copy=True, default=lambda self: self._default_tickets())
 
     def _compute_total_price(self):
         flight = self.env.ref(
@@ -123,7 +125,13 @@ class Event(models.Model):
 
     def _default_tickets(self):
         """ Add flight and single room supplement by default. """
-        res = super(Event, self)._default_tickets()
+        product = self.env.ref('event_sale.product_product_event',
+                               raise_if_not_found=False)
+        res = [{
+            'name': _('Registration'),
+            'product_id': product.id,
+            'price': 0,
+        }]
         room = self.env.ref(
             'website_event_compassion.product_template_single_room')
         flight = self.env.ref(

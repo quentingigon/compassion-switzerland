@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -105,8 +104,8 @@ if not testing:
             valid = True
             old = False
             try:
-                date = fields.Date.from_string(value)
-                today = date.today()
+                date = datetime.strptime(value, '%d.%m.%Y')
+                today = datetime.now()
                 old = date < today
                 valid = not old
             except ValueError:

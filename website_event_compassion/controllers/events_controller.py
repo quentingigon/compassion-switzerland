@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -12,7 +11,7 @@ from datetime import datetime, timedelta
 
 import werkzeug
 
-from odoo import http, _
+from odoo import http, _, fields
 from odoo.http import request
 
 from odoo.addons.payment.models.payment_acquirer import ValidationError
@@ -25,13 +24,16 @@ class EventsController(PaymentFormController):
 
     @http.route('/events/', auth='public', website=True)
     def list(self, **kwargs):
-        events = request.env['crm.event.compassion'].search([
+        today = fields.Date.to_string(datetime.today())
+        # Events that are set to finish after today
+        started_events = request.env['crm.event.compassion'].search([
             ('website_published', '=', True),
+            ('end_date', '>=', today),
         ])
-        if len(events) == 1:
-            return request.redirect('/event/' + str(events.id))
+        if len(started_events) == 1:
+            return request.redirect('/event/' + str(started_events.id))
         return request.render('website_event_compassion.list', {
-            'events': events
+            'events': started_events
         })
 
     ###################################################
@@ -102,7 +104,8 @@ class EventsController(PaymentFormController):
 
     def get_event_page_values(self, event, **kwargs):
         """
-        Gets the values used by the website to render the event page.
+        Processes the registration form and gets the values used by the website to
+        render the event page.
         :param event: crm.event.compassion record to render
         :param kwargs: request arguments
         :return: dict: values for the event website template
@@ -279,7 +282,7 @@ class EventsController(PaymentFormController):
                 "the departure. Until then, don't hesitate to contact us if "
                 "you have any question."
             )
-        return super(EventsController, self).compassion_payment_validate(
+        return super().compassion_payment_validate(
             tx, template, failure_template, **post
         )
 
@@ -299,5 +302,5 @@ class EventsController(PaymentFormController):
             delay = datetime.today() + timedelta(seconds=10)
             transaction.registration_id.with_delay(eta=delay).\
                 cancel_registration()
-        return super(EventsController, self).compassion_payment_validate(
+        return super().compassion_payment_validate(
             transaction, success_template, fail_template, **kwargs)

@@ -29,17 +29,18 @@
 # pylint: disable=C8101
 {
     'name': 'Compassion CH PDF-Qweb Reports',
-    'version': '11.0.0.0.0',
+    'version': '11.0.1.0.0',
     'category': 'Other',
     'author': 'Compassion CH',
     'license': 'AGPL-3',
     'website': 'http://www.compassion.ch',
     'depends': [
-        'label',                    # compassion-modules
-        'sponsorship_switzerland'   # compassion-switzerland
+        'label',                     # compassion-modules
+        'sponsorship_switzerland',   # compassion-switzerland
+        'report_wkhtmltopdf_param',  # reporting-engine
     ],
     'external_dependencies': {
-        'python': ['pyquery']
+        'python': ['pyquery', 'babel']
     },
     'data': [
         'report/compassion_layout.xml',

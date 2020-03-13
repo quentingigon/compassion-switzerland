@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -66,6 +65,13 @@ if not testing:
         @property
         def form_description(self):
             user = self.event_id.sudo().user_id
+            user_name = user.lastname
+            user_mail = user.email
+            if user.preferred_name:
+                user_name = f'{user.preferred_name} {user.lastname}'
+            if user_mail and '@' in user_mail:
+                user_mail = user_mail.replace('@', '(at)')
+
             return _(
                 "<p>Thank you for your interest in the work of Compassion, "
                 "to free more children from extreme poverty every day. "
@@ -93,9 +99,9 @@ if not testing:
                 "</br>"
                 "Compassion Switzerland"
                 "</p>"
-            ) % (user.preferred_name + " " + user.lastname,
+            ) % (user_name,
                  user.employee_ids.department_id.name,
-                 user.email.replace('@', '(at)')) + "<br/><br/>"
+                 user_mail) + "<br/><br/>"
 
         @property
         def _form_fieldsets(self):
@@ -162,7 +168,7 @@ if not testing:
         @property
         def form_widgets(self):
             # Radio field for single double room
-            res = super(EventRegistrationForm, self).form_widgets
+            res = super().form_widgets
             res.update({
                 'single_double_room': 'cms.form.widget.radio',
                 'gtc_accept': 'cms_form_compassion.form.widget.terms',
@@ -177,7 +183,7 @@ if not testing:
             return statement.text
 
         def form_before_create_or_update(self, values, extra_values):
-            super(EventRegistrationForm, self).form_before_create_or_update(
+            super().form_before_create_or_update(
                 values, extra_values
             )
             if extra_values.get('single_double_room') == 'double' and not \
@@ -191,16 +197,20 @@ if not testing:
             })
 
         def form_after_create_or_update(self, values, extra_values):
-            """ Mark the privacy statement as accepted.
             """
-            super(EventRegistrationForm,
-                  self).form_after_create_or_update(values, extra_values)
+            Mark the privacy statement as accepted.
+            Create the payment invoices in advance so the staff can edit it when needed
+            """
+            super().form_after_create_or_update(values, extra_values)
             partner = self.env['res.partner'].sudo().browse(
                 values.get('partner_id')).exists()
             partner.set_privacy_statement(origin='group_visit')
 
+            self.main_object.prepare_down_payment()
+            self.main_object.prepare_group_visit_payment()
+
         def form_next_url(self, main_object=None):
-            return u'/event/{}/confirmation?title={}&message={}'.format(
+            return '/event/{}/confirmation?title={}&message={}'.format(
                 self.main_object.compassion_event_id.id,
                 _("Thank you!"),
                 _("We are glad to confirm your registration to %s. "

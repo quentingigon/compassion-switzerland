@@ -70,7 +70,14 @@
                     <button name="get_event_registration_survey" type="object" class="oe_inline oe_stat_button" icon="fa-list-alt">
                         <field name="survey_count" widget="statinfo" string="Surveys"/>
                     </button>
+                    <button name="show_invoice" type="object" class="oe_inline oe_stat_button" icon="fa-file">
+                        <field name="invoice_count" widget="statinfo" string="Invoices"/>
+                    </button>
                 </div>
+            </xpath>
+
+            <xpath expr="//field[@name='message_follower_ids']" position="after">
+                <field name="activity_ids" widget="mail_activity"/>
             </xpath>
         </field>
     </record>
@@ -140,13 +147,7 @@
         <field name="code">
             records.button_reg_close()
         </field>
+        <field name="state">code</field>
+        <field name="binding_model_id" ref="model_event_registration"/>
     </record>
-    <record id="event_registration_all_attended" model="ir.values">
-        <field eval="'client_action_multi'" name="key2"/>
-        <field eval="'event.registration'" name="model"/>
-        <field name="name">Attended</field>
-        <field eval="'ir.actions.server,%d'%event_registration_all_attended_action"
-               name="value"/>
-    </record>
-
 </odoo>

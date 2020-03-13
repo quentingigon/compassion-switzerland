@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2014 Compassion CH (http://www.compassion.ch)
@@ -21,7 +20,7 @@ class TranslateConnect(MysqlConnector):
     """
 
     def __init__(self):
-        super(TranslateConnect, self).__init__(
+        super().__init__(
             'mysql_translate_host',
             'mysql_translate_user',
             'mysql_translate_pw',
@@ -50,7 +49,7 @@ class TranslateConnect(MysqlConnector):
         letter_age = (today - fields.Date.from_string(
             correspondence.scanned_date)).days
         # Each 15 days aging -> augment priority by 1
-        priority = min((letter_age/15) + 1, 4)
+        priority = min((letter_age // 15) + 1, 4)
         type_ids = correspondence.communication_type_ids.ids
         if first_letter_id in type_ids or final_letter_id in type_ids:
             priority = 4
@@ -69,8 +68,8 @@ class TranslateConnect(MysqlConnector):
             'kid_firstname': child.preferred_name,
             'age': child_age,
             'kid_gender': child.gender,
-            'createdat': self.current_time,
-            'updatedat': self.current_time,
+            'createdat': fields.Datetime.to_string(self.current_time),
+            'updatedat': fields.Datetime.to_string(self.current_time),
             'priority_id': priority,
             'text_type_id': text_type_id,
         }
@@ -82,8 +81,8 @@ class TranslateConnect(MysqlConnector):
         vals = {
             'file': self.letter_name[0:-4] + '.rtf',
             'text_id': text_id,
-            'createdat': self.current_time,
-            'updatedat': self.current_time,
+            'createdat': fields.Datetime.to_string(self.current_time),
+            'updatedat': fields.Datetime.to_string(self.current_time),
             'toDo_id': 0,
             'letter_odoo_id': letter.id,
         }
@@ -97,8 +96,8 @@ class TranslateConnect(MysqlConnector):
         vals = {
             'translation_id': translation_id,
             'status_id': to_translate,
-            'createdat': self.current_time,
-            'updatedat': self.current_time,
+            'createdat': fields.Datetime.to_string(self.current_time),
+            'updatedat': fields.Datetime.to_string(self.current_time),
         }
         return self.upsert("translation_status", vals)
 
@@ -106,8 +105,8 @@ class TranslateConnect(MysqlConnector):
         """ Returns the language's id in MySQL that has  GP_Libel pointing
          to the iso_code given (returns -1 if not found). """
         res = self.select_one(
-            "SELECT id FROM language WHERE GP_Libel LIKE '{}'"
-            .format(lang_compassion_id.code_iso))
+            "SELECT id FROM language WHERE GP_Libel LIKE "
+            "%s", lang_compassion_id.code_iso)
         return res['id'] if res else -1
 
     def get_translated_letters(self):
@@ -140,7 +139,7 @@ class TranslateConnect(MysqlConnector):
         vals = {
             'id': translation_id,
             'toDo_id': 5,
-            'updatedat': self.current_time,
+            'updatedat': fields.Datetime.to_string(self.current_time),
         }
         return self.upsert("translation", vals)
 
@@ -151,7 +150,7 @@ class TranslateConnect(MysqlConnector):
         vals = {
             'id': translation_id,
             'toDo_id': 4,
-            'updatedat': self.current_time,
+            'updatedat': fields.Datetime.to_string(self.current_time),
         }
         return self.upsert("translation", vals)
 
@@ -161,13 +160,11 @@ class TranslateConnect(MysqlConnector):
 
     def remove_from_text(self, text_id):
         """ Delete a text record for the text_id given """
-        self.query("DELETE FROM text WHERE id={}"
-                   .format(text_id))
+        self.query("DELETE FROM text WHERE id=%s", text_id)
 
     def remove_translation_with_odoo_id(self, text_id):
         self.query("DELETE text FROM text INNER JOIN translation ON text.id\
-             = translation.text_id WHERE translation.letter_odoo_id = {}"
-                   .format(text_id))
+             = translation.text_id WHERE translation.letter_odoo_id = %s", text_id)
 
     def get_server_uptime(self):
         return self.select_one("SHOW GLOBAL STATUS LIKE 'Uptime' ")
@@ -201,8 +198,7 @@ class TranslateConnect(MysqlConnector):
 
     def remove_user(self, partner):
         """ Delete a user """
-        return self.query("DELETE FROM user WHERE number={}"
-                          .format(partner.ref))
+        return self.query("DELETE FROM user WHERE number= %s", partner.ref)
 
     def disable_user(self, partner):
         vals = {

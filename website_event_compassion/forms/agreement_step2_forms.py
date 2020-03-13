@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -8,7 +7,6 @@
 #
 ##############################################################################
 import re
-
 from dateutil.relativedelta import relativedelta
 
 from odoo import models, fields, tools, _
@@ -31,7 +29,7 @@ if not testing:
         @property
         def form_widgets(self):
             # Hide fields
-            res = super(Step2Forms, self).form_widgets
+            res = super().form_widgets
             res['form_id'] = 'cms_form_compassion.form.widget.hidden'
             return res
 
@@ -182,9 +180,9 @@ if not testing:
 
         @property
         def form_widgets(self):
-            res = super(TripForm, self).form_widgets
+            res = super().form_widgets
             res['passport'] = 'cms_form_compassion.form.widget.document'
-            res['passport_expiration_date'] = 'cms.form.widget.date.ch',
+            res['passport_expiration_date'] = 'cms.form.widget.date.ch'
             return res
 
         @property
@@ -300,7 +298,7 @@ if not testing:
         @property
         def form_widgets(self):
             # Hide fields
-            res = super(CriminalForm, self).form_widgets
+            res = super().form_widgets
             res['criminal_record'] = 'cms_form_compassion.form.widget.document'
             return res
 
@@ -312,8 +310,7 @@ if not testing:
         def form_before_create_or_update(self, values, extra_values):
             if values.get('criminal_record'):
                 # Mark the task criminal record as completed
-                criminal_task = self.env.ref(
-                    'website_event_compassion.task_criminal')
+                criminal_task = self.env.ref('website_event_compassion.task_criminal')
                 values['completed_task_ids'] = [(4, criminal_task.id)]
             else:
                 del values['completed_task_ids']

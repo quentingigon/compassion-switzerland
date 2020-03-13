@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -35,6 +34,10 @@ if not testing:
         partner_opt_out = fields.Boolean(
             "Unsubscribe from e-mails"
         )
+        blacklist_fields = [
+            'tax_line_ids', 'refund_invoice_ids', 'payment_ids',
+            'payment_move_line_ids', 'timesheet_ids', 'slip_ids', 'failed_message_ids',
+        ]
 
         @property
         def _form_fieldsets(self):
@@ -67,10 +70,16 @@ if not testing:
                 },
             ]
 
+        def _form_remove_uwanted(self, _all_fields):
+            """Remove fields from form fields."""
+            super()._form_remove_uwanted(_all_fields)
+            for fname in self.blacklist_fields:
+                _all_fields.pop(fname, None)
+
         @property
         def form_widgets(self):
             # Hide fields
-            res = super(EventDonationForm, self).form_widgets
+            res = super().form_widgets
             res.update({
                 'gtc_accept': 'cms_form_compassion.form.widget.terms',
                 'partner_birthdate': 'cms.form.widget.date.ch',
@@ -96,7 +105,7 @@ if not testing:
             return _("Proceed with payment")
 
         def form_init(self, request, main_object=None, **kw):
-            form = super(EventDonationForm, self).form_init(
+            form = super().form_init(
                 request, main_object, **kw)
             # Store ambassador and event in model to use it in properties
             registration = kw.get('registration')
@@ -107,12 +116,12 @@ if not testing:
 
         def form_before_create_or_update(self, values, extra_values):
             """ Inject invoice values """
-            super(EventDonationForm, self).form_before_create_or_update(
+            super().form_before_create_or_update(
                 values, extra_values)
             event = self.event_id.sudo()
             product = event.odoo_event_id.donation_product_id
             ambassador = self.ambassador_id.sudo()
-            name = u'[{}] Donation for {}'.format(event.name, ambassador.name)
+            name = f'[{event.name}] Donation for {ambassador.name}'
             values.update({
                 'origin': name,
                 'invoice_line_ids': [(0, 0, {
@@ -137,8 +146,7 @@ if not testing:
         def form_after_create_or_update(self, values, extra_values):
             """ Mark the privacy statement as accepted.
             """
-            super(EventDonationForm,
-                  self).form_after_create_or_update(values, extra_values)
+            super().form_after_create_or_update(values, extra_values)
             partner = self.env['res.partner'].sudo().browse(
                 values.get('partner_id')).exists()
             partner.set_privacy_statement(origin='event_donation')

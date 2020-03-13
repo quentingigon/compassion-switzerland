@@ -35,9 +35,12 @@
     'license': 'AGPL-3',
     'website': 'https://github.com/CompassionCH/compassion-switzerland/'
                'tree/10.0',
-    'depends': ['sms_sponsorship',              # compassion-modules
-                'sponsorship_switzerland',      # compassion-switzerland
-                'child_sync_wp'],               # compassion-switzerland
+    'depends': [
+        'sms_sponsorship',              # compassion-modules
+        'sponsorship_switzerland',      # compassion-switzerland
+        'child_sync_wp',                # compassion-switzerland
+        'sms',                          # odoo
+    ],
     'data': [
         'security/ir.model.access.csv',
         'data/sms_hook.xml',

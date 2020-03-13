@@ -36,25 +36,19 @@ class StaffNotificationSettings(models.TransientModel):
         ])
 
     @api.multi
-    def set_sponsorship_fr_id(self):
-        self.env['ir.config_parameter'].set_param(
-            'child_wp.sponsorship_notify_fr_id',
-            str(self.sponsorship_fr_id.id)
-        )
+    def get_sponsorship_fr_id(self):
+        return self.env['ir.config_parameter'].sudo()\
+            .get_param('child_wp.sponsorship_notify_fr_id', None)
 
     @api.multi
-    def set_sponsorship_de_id(self):
-        self.env['ir.config_parameter'].set_param(
-            'child_wp.sponsorship_notify_de_id',
-            str(self.sponsorship_de_id.id)
-        )
+    def get_sponsorship_de_id(self):
+        return self.env['ir.config_parameter'].sudo() \
+            .get_param('child_wp.sponsorship_notify_de_id', None)
 
     @api.multi
-    def set_sponsorship_it_id(self):
-        self.env['ir.config_parameter'].set_param(
-            'child_wp.sponsorship_notify_it_id',
-            str(self.sponsorship_it_id.id)
-        )
+    def get_sponsorship_it_id(self):
+        return self.env['ir.config_parameter'].sudo() \
+            .get_param('child_wp.sponsorship_notify_it_id', None)
 
     @api.multi
     def get_sponsorship_fr_id(self):
@@ -72,33 +66,27 @@ class StaffNotificationSettings(models.TransientModel):
             .get_param('child_wp.sponsorship_notify_it_id', '18002')
 
     @api.model
-    def get_default_values(self, _fields):
-        param_obj = self.env['ir.config_parameter']
-        res = {
-            'sponsorship_fr_id': int(param_obj.get_param(
-                'child_wp.sponsorship_notify_fr_id', '18001')),
-            'sponsorship_de_id': int(param_obj.get_param(
-                'child_wp.sponsorship_notify_de_id', '18001')),
-            'sponsorship_it_id': int(param_obj.get_param(
-                'child_wp.sponsorship_notify_it_id', '18002')),
-        }
-        res.update(super(StaffNotificationSettings,
-                         self).get_default_values(_fields))
-        return res
-
-    @api.model
     def get_values(self):
         res = super().get_values()
         res.update({
-            'sponsorship_fr_id': self.get_sponsorship_fr_id(),
-            'sponsorship_de_id': self.get_sponsorship_de_id(),
-            'sponsorship_it_id': self.get_sponsorship_it_id()
+            'sponsorship_fr_id': int(self.get_sponsorship_fr_id() or 0) or False,
+            'sponsorship_de_id': int(self.get_sponsorship_de_id() or 0) or False,
+            'sponsorship_it_id': int(self.get_sponsorship_it_id() or 0) or False
         })
         return res
 
     @api.multi
     def set_values(self):
         super().set_values()
-        self.set_sponsorship_fr_id()
-        self.set_sponsorship_de_id()
-        self.set_sponsorship_it_id()
+        self.env['ir.config_parameter'].sudo().set_param(
+            'child_wp.sponsorship_notify_fr_id',
+            str(self.sponsorship_fr_id.id or 0)
+        )
+        self.env['ir.config_parameter'].sudo().set_param(
+            'child_wp.sponsorship_notify_de_id',
+            str(self.sponsorship_de_id.id or 0)
+        )
+        self.env['ir.config_parameter'].sudo().set_param(
+            'child_wp.sponsorship_notify_it_id',
+            str(self.sponsorship_it_id.id or 0)
+        )

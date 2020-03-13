@@ -227,10 +227,10 @@ class AdvocateDetails(geo_model.GeoModel):
                 "partner_compassion.engagement_sport"))
         for advocate in birthday_advocates:
             lang = advocate.partner_id.lang[:2]
-            notify_partner_id = self.env['staff.notification.settings'].\
+            notify_partner_id = self.env['res.config.settings'].sudo().\
                 get_param(f'advocate_birthday_{lang}_id')
             preferred_name = advocate.partner_id.preferred_name
-            date = advocate.partner_id.get_date('birthdate_date', '%d %B')
+            date = advocate.partner_id.get_date('birthdate_date', 'd MMMM')
             display_name = advocate.display_name
             advocate.message_post(
                 body=_(f"This is a reminder that {preferred_name} "

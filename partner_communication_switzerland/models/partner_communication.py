@@ -27,7 +27,7 @@ from odoo.exceptions import MissingError, UserError
 _logger = logging.getLogger(__name__)
 
 try:
-    from pyPdf import PdfFileWriter, PdfFileReader
+    from PyPDF2 import PdfFileWriter, PdfFileReader
     from bs4 import BeautifulSoup
 except ImportError:
     _logger.warning("Please install pypdf and bs4 for using the module")
@@ -211,20 +211,25 @@ class PartnerCommunication(models.Model):
             ('brand_name', '=', 'Herma A4')], limit=1)
         label_format = self.env['label.config'].search([
             ('name', '=', '4455 SuperPrint WeiB')], limit=1)
-        label_wizard = self.env['label.print.wizard'].with_context({
+        report_context = {
             'active_ids': sponsorships.ids,
             'active_model': 'recurring.contract',
             'label_print': label_print.id,
             'must_skip_send_to_printer': True
-        }).create({
-            'brand_id': label_brand.id,
-            'config_id': label_format.id,
-            'number_of_labels': 33
-        })
+        }
+        label_wizard = self.env['label.print.wizard']\
+            .with_context(report_context) \
+            .create(
+            {
+                'brand_id': label_brand.id,
+                'config_id': label_format.id,
+                'number_of_labels': 33
+            })
         label_data = label_wizard.get_report_data()
-        report_name = 'label.report_label_name'
-        pdf = self._get_pdf_from_data(
-            label_data, self.env.ref('label.report_dynamic_label'))
+        report_name = 'label.report_label'
+        report = self.env['ir.actions.report']._get_report_from_name(report_name) \
+            .with_context(report_context)
+        pdf = self._get_pdf_from_data(label_data, report)
         attachments[_('sponsorship labels.pdf')] = [
             report_name,
             pdf
@@ -329,7 +334,7 @@ class PartnerCommunication(models.Model):
             sponsorships = sponsorships.mapped('sub_sponsorship_id')
         children = sponsorships.mapped('child_id')
         # Always retrieve latest information before printing dossier
-        children.get_infos()
+        # children.get_infos()
         report_name = 'report_compassion.childpack_small'
         data = {
             'lang': lang,
@@ -426,7 +431,7 @@ class PartnerCommunication(models.Model):
                                   'sponsorship_waiting_reminder_2')
         no_money_3 = self.env.ref('partner_communication_switzerland.'
                                   'sponsorship_waiting_reminder_3')
-        settings = self.env['availability.management.settings']
+        settings = self.env['res.config.settings'].sudo()
         first_extension = settings.get_param('no_money_hold_duration')
         second_extension = settings.get_param('no_money_hold_extension')
         for communication in other_jobs:
@@ -464,13 +469,8 @@ class PartnerCommunication(models.Model):
         for job in self.filtered('partner_mobile'):
             sms_text = job.convert_html_for_sms(link_pattern, sms_medium_id)
             sms_texts.append(sms_text)
-            sms_wizard = self.env['sms.sender.wizard'].with_context(
-                partner_id=job.partner_id.id).create({
-                    'subject': job.subject,
-                    'text': sms_text,
-                    'sms_provider_id': job.sms_provider_id.id
-                })
-            sms_wizard.send_sms_partner()
+            job.partner_id.with_context(sms_provider=job.sms_provider_id)\
+                .message_post_send_sms(sms_text, note_msg=job.subject)
             job.write({
                 'state': 'done',
                 'sent_date': fields.Datetime.now(),
@@ -598,7 +598,9 @@ class PartnerCommunication(models.Model):
             'doc_model': report.model,
             'docs': self.env[report.model].browse(child_ids),
         }
-        pdf = self._get_pdf_from_data(data, self.env.ref('report_child_picture'))
+        pdf = self._get_pdf_from_data(
+            data,
+            self.env.ref('partner_communication_switzerland.report_child_picture'))
         attachments.update({
             _('child picture.pdf'): [
                 report_name,
@@ -698,7 +700,15 @@ class PartnerCommunication(models.Model):
         return base64.b64encode(output_stream.read())
 
     def _get_pdf_from_data(self, data, report_ref):
-        pdf_data = report_ref.report_action(self, data=data)
-        return base64.encodebytes(
-            report_ref.render_qweb_pdf(
-                pdf_data['data']['doc_ids'], pdf_data['data'])[0])
+        report_str = report_ref.render_qweb_pdf(data['doc_ids'], data)
+        if isinstance(report_str, (list, tuple)):
+            report_str = report_str[0]
+        elif isinstance(report_str, bool):
+            report_str = ""
+
+        output = None
+        if isinstance(report_str, bytes):
+            output = base64.encodebytes(report_str)
+        else:
+            base64.encodebytes(report_str.encode())
+        return output

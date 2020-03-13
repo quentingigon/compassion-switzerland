@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -14,7 +13,7 @@ import base64
 from datetime import date
 
 from odoo import api, models, fields, _, SUPERUSER_ID
-from odoo.addons.website.models.website import slug
+from odoo.addons.website.models.website import slugify as slug
 from odoo.tools import file_open
 
 from odoo.addons.queue_job.job import job
@@ -47,7 +46,7 @@ def _get_file_type(data):
 
 class Event(models.Model):
     _inherit = ['website.published.mixin', 'website.seo.metadata',
-                'event.registration']
+                'event.registration', 'mail.activity.mixin']
     _name = 'event.registration'
     _description = 'Event registration'
     _order = 'create_date desc'
@@ -109,7 +108,7 @@ class Event(models.Model):
     )
     host_url = fields.Char(compute='_compute_host_url')
     wordpress_host = fields.Char(compute='_compute_wordpress_host')
-    event_name = fields.Char(related='event_id.name')
+    event_name = fields.Char(related='event_id.name', track_visibility='onchange')
     uuid = fields.Char(default=lambda self: self._get_uuid(), copy=False)
     include_flight = fields.Boolean()
     double_room_person = fields.Char('Double room with')
@@ -136,7 +135,7 @@ class Event(models.Model):
     )
     partner_gender = fields.Selection(related='partner_id.title.gender',
                                       readonly=True)
-    comments = fields.Text()
+    comments = fields.Text(track_visibility='onchange')
 
     has_signed_travel_contract = fields.Boolean(compute='_compute_step2_tasks')
     has_signed_child_protection = fields.Boolean(
@@ -187,6 +186,7 @@ class Event(models.Model):
         'account.invoice', 'Trip invoice', copy=False)
 
     survey_count = fields.Integer(compute='_compute_survey_count')
+    invoice_count = fields.Integer(compute='_compute_invoice_count')
 
     ##########################################################################
     #                             FIELDS METHODS                             #
@@ -207,7 +207,7 @@ class Event(models.Model):
                 registration.event_id.participants_amount_objective
             if objective:
                 registration.amount_raised_percents = int(
-                    registration.amount_raised * 100 / objective)
+                    registration.amount_raised * 100 // objective)
 
     def _compute_amount_raised(self):
         for registration in self:
@@ -230,7 +230,7 @@ class Event(models.Model):
             registration.amount_raised = amount_raised
 
     def _compute_host_url(self):
-        params_obj = self.env['ir.config_parameter']
+        params_obj = self.env['ir.config_parameter'].sudo()
         host = params_obj.get_param('web.external.url') or \
             params_obj.get_param('web.base.url')
         for registration in self:
@@ -346,6 +346,14 @@ class Event(models.Model):
                     ('survey_id', 'in', surveys.ids)
                 ])
 
+    def _compute_invoice_count(self):
+        for registration in self:
+            event = registration.compassion_event_id
+            registration.invoice_count = self.env['account.invoice'].search_count([
+                ('origin', 'like', f'[{event.name}]'),
+                ('partner_id', '=', registration.partner_id.id)
+            ])
+
     @api.depends('medical_survey_id', 'medical_survey_id.state')
     def _compute_requires_medical_discharge(self):
         for registration in self:
@@ -437,7 +445,7 @@ class Event(models.Model):
     def write(self, vals):
         if 'stage_id' in vals:
             vals['stage_date'] = fields.Date.today()
-        res = super(Event, self).write(vals)
+        res = super().write(vals)
         for registration in self:
             if registration.state == 'done' and registration.event_id. \
                     feedback_survey_id and not registration.feedback_survey_id:
@@ -451,7 +459,7 @@ class Event(models.Model):
 
     @api.model
     def create(self, values):
-        record = super(Event, self).create(values)
+        record = super().create(values)
 
         # check the subtype note by default
         # for all the default follower of a new registration
@@ -469,7 +477,7 @@ class Event(models.Model):
     ##########################################################################
     @api.multi
     def do_draft(self):
-        super(Event, self).do_draft()
+        super().do_draft()
         return self.write({
             'stage_id': self.env.ref(
                 'website_event_compassion.stage_all_unconfirmed').id
@@ -498,7 +506,7 @@ class Event(models.Model):
 
     @api.multi
     def button_reg_close(self):
-        super(Event, self).button_reg_close()
+        super().button_reg_close()
         return self.write({
             'stage_id': self.env.ref(
                 'website_event_compassion.stage_all_attended').id
@@ -506,7 +514,7 @@ class Event(models.Model):
 
     @api.multi
     def button_reg_cancel(self):
-        super(Event, self).button_reg_cancel()
+        super().button_reg_cancel()
         return self.write({
             'stage_id': self.env.ref(
                 'website_event_compassion.stage_all_cancelled').id
@@ -534,9 +542,27 @@ class Event(models.Model):
             'context': self.env.context,
         }
 
+    @api.multi
+    def show_invoice(self):
+        event_name = self.compassion_event_id.name
+        return {
+            'name': _('Income'),
+            'type': 'ir.actions.act_window',
+            'view_mode': 'tree,form',
+            'view_type': 'form',
+            'res_model': 'account.invoice',
+            'src_model': 'event.registration',
+            'context': self.env.context,
+            'domain': [
+                ('origin', 'like', f'[{event_name}]'),
+                ('partner_id', '=', self.partner_id.id)
+            ]
+
+        }
     ##########################################################################
     #                       STAGE TRANSITION METHODS                         #
     ##########################################################################
+
     @api.multi
     def next_stage(self):
         """ Transition to next registration stage """
@@ -544,8 +570,7 @@ class Event(models.Model):
             next_stage = self.env['event.registration.stage'].search([
                 ('sequence', '>', registration.stage_id.sequence),
                 '|',
-                ('event_type_ids', 'in',
-                 registration.stage_id.event_type_ids.ids),
+                ('event_type_ids', 'in', registration.stage_id.event_type_ids.ids),
                 ('event_type_ids', '=', False)
             ], limit=1)
             if next_stage:
@@ -554,12 +579,6 @@ class Event(models.Model):
                     'uuid': self._get_uuid()
                 })
             if next_stage == self.env.ref(
-                    'website_event_compassion.stage_group_pay'):
-                registration.prepare_down_payment()
-            elif next_stage == self.env.ref(
-                    'website_event_compassion.stage_group_documents'):
-                registration.prepare_group_visit_payment()
-            elif next_stage == self.env.ref(
                     'website_event_compassion.stage_group_medical'):
                 registration.prepare_medical_survey()
         # Send potential communications after stage transition
@@ -567,6 +586,9 @@ class Event(models.Model):
         return True
 
     def prepare_down_payment(self):
+        if not self.event_ticket_id:
+            return
+
         # Prepare invoice for down payment
         mode_pay_bvr = self.env['account.payment.mode'].sudo().search([
             ('name', '=', 'BVR')
@@ -574,7 +596,7 @@ class Event(models.Model):
         self.ensure_one()
         event = self.compassion_event_id
         product = self.event_ticket_id.product_id
-        name = u'[{}] Down payment'.format(event.name)
+        name = f'[{event.name}] Down payment'
         invoice = self.env['account.invoice'].create({
             'origin': name,
             'partner_id': self.partner_id.id,
@@ -595,6 +617,9 @@ class Event(models.Model):
         self.down_payment_id = invoice
 
     def prepare_group_visit_payment(self):
+        if not self.event_id.event_ticket_ids:
+            return
+
         # Prepare invoice for group visit payment
         mode_pay_bvr = self.env['account.payment.mode'].sudo().search([
             ('name', '=', 'BVR')
@@ -642,7 +667,7 @@ class Event(models.Model):
             'product_id': product.id,
             'account_analytic_id': event.analytic_id.id,
         })
-        name = u'[{}] Trip payment'.format(event.name)
+        name = f'[{event.name}] Trip payment'
         invoice = self.env['account.invoice'].create({
             'origin': name,
             'partner_id': self.partner_id.id,
@@ -704,16 +729,24 @@ class Event(models.Model):
                     'object_ids': registration.ids,
                     'config_id': discharge_config.id,
                 })
+            file_data = file_open(
+                'website_event_compassion/static/src/'
+                'medical_discharge_' + partner.lang + '.docx',
+                mode="rb"
+            ).read()
             communication.attachment_ids.create({
                 'name': _('medical discharge.docx'),
                 'report_name': 'report_compassion.a4_bvr',
-                'data': file_open(
-                    'website_event_compassion/static/src/'
-                    'medical_discharge_' + partner.lang + '.docx'
-                ).read().encode('base64'),
+                'data': base64.b64encode(file_data),
                 'communication_id': communication.id
             })
             communication.send()
+            registration.message_post(
+                _("Event: {}\nPartner:{}\nPartner is under treatment, a medical "
+                  "discharge is required.").format(
+                    registration.event_name, partner.preferred_name),
+                _("Event registration update (medical survey)")
+            )
         return self.write({
             'completed_task_ids': [
                 (4, self.env.ref(
@@ -736,4 +769,13 @@ class Event(models.Model):
         if 'user_id' in init_values and init_values['user_id'] is False:
             # When the registration is created.
             return 'website_event_compassion.mt_registration_create'
-        return super(Event, self)._track_subtype(init_values)
+        return super()._track_subtype(init_values)
+
+    @api.multi
+    def past_event_action(self):
+        stage = self.env.ref('website_event_compassion.stage_all_attended')
+        for reg in self:
+            if reg.state == 'open':
+                reg.write({
+                    'stage_id': stage.id
+                })

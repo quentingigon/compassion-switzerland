@@ -83,15 +83,17 @@ class BvrSponsorship(models.AbstractModel):
         return final_data
 
 
+# pylint: disable=consider-merging-classes-inherited
 class TwoBvrSponsorship(models.AbstractModel):
     _inherit = 'report.report_compassion.bvr_sponsorship'
     _name = 'report.report_compassion.2bvr_sponsorship'
 
     def _get_report(self):
-        return self.env['report']._get_report_from_name(
+        return self.env['ir.actions.report']._get_report_from_name(
             'report_compassion.2bvr_sponsorship')
 
 
+# pylint: disable=consider-merging-classes-inherited
 class ThreeBvrSponsorship(models.AbstractModel):
     _inherit = 'report.report_compassion.bvr_sponsorship'
     _name = 'report.report_compassion.3bvr_sponsorship'

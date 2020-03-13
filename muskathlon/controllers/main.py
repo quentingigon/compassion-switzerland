@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2018 Compassion CH (http://www.compassion.ch)
@@ -8,14 +7,17 @@
 #
 ##############################################################################
 import json
-import urllib
+import urllib.error
+import urllib.parse
+import urllib.request
 from base64 import b64encode
 
-from odoo.http import request, route
-from odoo.addons.website_event_compassion.controllers.events_controller \
-    import EventsController
 from odoo.addons.cms_form_compassion.tools import validity_checker
 from odoo.addons.payment.models.payment_acquirer import ValidationError
+from odoo.addons.website_event_compassion.controllers.events_controller \
+    import EventsController
+
+from odoo.http import request, route
 
 
 class MuskathlonWebsite(EventsController):
@@ -120,14 +122,14 @@ class MuskathlonWebsite(EventsController):
         if form_success:
             result = request.redirect('/my/home')
         else:
-            result = request.render("website_portal.portal_my_home", values)
+            result = request.render("portal.portal_my_home", values)
         return self._form_redirect(result, full_page=True)
 
     @route(['/my/api'], type='http', auth='user', website=True)
     def save_ambassador_picture(self, **post):
         user = request.env.user
         partner = user.partner_id
-        return_view = 'website_portal.portal_my_home'
+        return_view = 'portal.portal_my_home'
         picture_post = post.get('picture_1')
         if picture_post:
             return_view = 'muskathlon.picture_1_formatted'
@@ -249,10 +251,10 @@ class MuskathlonWebsite(EventsController):
                      self).get_donation_success_template(event)
 
     def _prepare_portal_layout_values(self):
-        values = super(MuskathlonWebsite, self)._prepare_portal_layout_values()
-        registrations = request.env['event.registration']\
-            .search([('partner_id', '=', values['user'].partner_id.id)])
-        partner = values['user'].partner_id
+        values = super()._prepare_portal_layout_values()
+        partner = request.env.user.partner_id
+        registrations = request.env['event.registration'].search([
+            ('partner_id', '=', partner.id)])
         surveys = request.env['survey.user_input'].search([
             ('survey_id', 'in', registrations.mapped(
                 'event_id.medical_survey_id').ids),
@@ -270,7 +272,7 @@ class MuskathlonWebsite(EventsController):
         child_protection_charter = {
             'has_agreed': partner.has_agreed_child_protection_charter,
             'url': '/partner/%s/child-protection-charter?redirect=%s' %
-                   (partner.uuid, urllib.quote('/my/home', safe='')),
+                   (partner.uuid, urllib.parse.quote('/my/home', safe='')),
         }
 
         if registrations and partner.advocate_details_id:

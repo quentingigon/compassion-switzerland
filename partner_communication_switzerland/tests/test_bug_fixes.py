@@ -7,6 +7,7 @@
 #    The licence is in the file __manifest__.py
 #
 ##############################################################################
+import base64
 import logging
 import mock
 from odoo.addons.sponsorship_compassion.tests.test_sponsorship_compassion \
@@ -20,7 +21,9 @@ logger = logging.getLogger(__name__)
 
 mock_update_hold = ('odoo.addons.child_compassion.models.compassion_hold'
                     '.CompassionHold.update_hold')
-mock_get_pdf = 'odoo.addons.report.models.report.Report.render_qweb_pdf'
+
+mock_get_pdf = 'odoo.addons.base_report_to_printer.' \
+               'models.ir_actions_report.IrActionsReport.render_qweb_pdf'
 
 
 class TestSponsorship(BaseSponsorshipTest):
@@ -30,9 +33,23 @@ class TestSponsorship(BaseSponsorshipTest):
         # Deactivate mandates of Michel Fletcher to avoid directly validate
         # sponsorship to waiting state.
         self.michel.ref = self.ref(7)
+        bank = self.env['res.bank'].create({
+            'name': 'BCV',
+            'bic': 'BIC23423',
+            'clearing': '234234',
+            'ccp': '01-1234-1',
+        })
+        bank_account = self.env['res.partner.bank'].create({
+            'partner_id':  self.michel.id,
+            'bank_id': bank.id,
+            'acc_number': 'Bank/CCP 01-1234-1',
+        })
         self.mandates = self.env['account.banking.mandate'].search([
             ('partner_id', '=', self.michel.parent_id.id)])
         self.mandates.write({'state': 'draft'})
+        bank_account.mandate_ids = self.mandates
+        self.michel.bank_ids = bank_account
+
         payment_mode_lsv = self.env.ref(
             'sponsorship_switzerland.payment_mode_lsv')
         self.sp_group = self.create_group({
@@ -48,8 +65,9 @@ class TestSponsorship(BaseSponsorshipTest):
             dossier communication for the sponsor.
         """
         update_hold.return_value = True
+
         f_path = 'addons/partner_communication_switzerland/static/src/test.pdf'
-        with file_open(f_path) as pdf_file:
+        with file_open(f_path, 'rb') as pdf_file:
             get_pdf.return_value = pdf_file.read()
 
         # Creation of the sponsorship contract
@@ -100,7 +118,7 @@ class TestSponsorship(BaseSponsorshipTest):
         self.assertTrue('Birthday Gift.pdf' in bvr)
         values = bvr['Birthday Gift.pdf']
         self.assertEqual(values[0], 'report_compassion.bvr_gift_sponsorship')
-        self.assertRegex(values[1], r'^JVBERi0xLjIN.{5200}$')
+        self.assertRegex(values[1].decode('utf-8'), r'^JVBERi0xLjIN.*')
 
         graduation_bvr = communications.get_graduation_bvr()
         self.assertTrue('Graduation Gift.pdf' in graduation_bvr)
@@ -112,8 +130,9 @@ class TestSponsorship(BaseSponsorshipTest):
 
     def _create_communication(self, get_pdf, update_hold):
         update_hold.return_value = True
+
         f_path = 'addons/partner_communication_switzerland/static/src/test.pdf'
-        with file_open(f_path) as pdf_file:
+        with file_open(f_path, 'rb') as pdf_file:
             get_pdf.return_value = pdf_file.read()
 
         child = self.create_child(self.ref(11))
@@ -154,10 +173,10 @@ class TestSponsorship(BaseSponsorshipTest):
     @mock.patch(mock_get_pdf)
     def test_private_convert_pdf(self, get_pdf, update_hold):
         update_hold.return_value = True
+
         f_path = 'addons/partner_communication_switzerland/static/src/test.pdf'
-        with file_open(f_path) as pdf_file:
-            pdf_data = pdf_file.read()
-            get_pdf.return_value = pdf_data
+        with file_open(f_path, 'rb') as pdf_file:
+            get_pdf.return_value = pdf_file.read()
 
         child = self.create_child(self.ref(11))
         self.michel.letter_delivery_preference = 'physical'
@@ -175,7 +194,7 @@ class TestSponsorship(BaseSponsorshipTest):
             'template_id': default_template.id,
             'original_text': 'my text',
             'sponsorship_id': sponsorship.id,
-            'letter_image': pdf_data.encode('base64')
+            'letter_image': base64.b64encode(get_pdf.return_value)
         }
         letter = self.env['correspondence'].create(correspondence_data)
 

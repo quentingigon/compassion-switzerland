@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 #    Copyright (C) 2014-2015 Compassion CH (http://www.compassion.ch)
@@ -36,12 +35,13 @@ class MysqlConnector(object):
         try:
             self._con = MySQLdb.connect(mh, mu, mp, md, charset='utf8')
             self._cur = self._con.cursor(MySQLdb.cursors.DictCursor)
-        except MySQLdb.Error, e:
-            logger.debug("Error %d: %s" % (e.args[0], e.args[1]))
+        except MySQLdb.Error as e:
+            logger.debug(f"Error {e.args[0]}: {e.args[1]}")
 
     def __del__(self):
         """ Close the MySQL connection. """
         if self._con:
+            self._con.commit()
             self._con.close()
 
     def query(self, statement, args=None):
@@ -58,9 +58,10 @@ class MysqlConnector(object):
         """
         if args and not isinstance(args, (list, tuple, dict)):
             args = [args]
-        with self._con:
+        if self._con:
             self._cur.execute(statement, args)
             return self._cur.lastrowid or True
+        return True
 
     def select_one(self, statement, args=None):
         """ Performs a MySQL SELECT statement and returns one single row.
@@ -79,9 +80,10 @@ class MysqlConnector(object):
         """
         if args and not isinstance(args, (list, tuple, dict)):
             args = [args]
-        with self._con:
+        if self._con:
             self._cur.execute(statement, args)
             return self._cur.fetchone() or dict()
+        return dict()
 
     def select_all(self, statement, args=None):
         """ Performs a MySQL SELECT statement and returns all rows.
@@ -102,16 +104,17 @@ class MysqlConnector(object):
         """
         if args and not isinstance(args, (list, tuple, dict)):
             args = [args]
-        with self._con:
+        if self._con:
             self._cur.execute(statement, args)
             return self._cur.fetchall() or list()
+        return list()
 
     def is_alive(self):
         """ Test if the connection is alive. """
         try:
             self.select_one("SELECT VERSION()")
             return True
-        except Exception:
+        except:
             return False
 
     def _get_gp_uid(self, uid):
@@ -127,7 +130,7 @@ class MysqlConnector(object):
         query_string = "INSERT INTO {0}({1}) VALUES ({2}) ON DUPLICATE KEY " \
             "UPDATE {3}"
 
-        cols = vals.keys()
+        cols = list(vals.keys())
         col_string = ",".join(cols)
         val_string = ",".join(["%s" for i in range(0, len(vals))])
         update_string = ",".join([
@@ -135,7 +138,7 @@ class MysqlConnector(object):
 
         sql_query = query_string.format(table, col_string, val_string,
                                         update_string)
-        values = vals.values()
+        values = list(vals.values())
         log_string = "UPSERT {0}({1}) WITH VALUES ({2})"
         logger.info(
             log_string.format(table, col_string, val_string) % tuple(values))
